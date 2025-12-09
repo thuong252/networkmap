@@ -1,391 +1,338 @@
 <!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <title>Network Graph — Markdown → Bubble Map (Highlight edges & neighbors)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <style>
-    :root{--accent:#2f80ed;--bg:#f6f8fb}
-    html,body{height:100%;margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg)}
-    header{display:flex;gap:8px;align-items:center;padding:10px;background:#fff;border-bottom:1px solid #e6e9f2}
-    .controls{display:flex;gap:8px;align-items:center}
-    button{background:var(--accent);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer}
-    button.secondary{background:#fff;color:#333;border:1px solid #d0d7ee}
-    input[type=file]{padding:6px}
-    .hint{color:#666;font-size:13px;margin-left:8px}
-    .panel{display:flex;height:calc(100vh - 56px)}
-    .left{width:420px;border-right:1px solid #e6e9f2;background:#fff;overflow:auto;padding:12px;box-sizing:border-box}
-    .right{flex:1;position:relative}
-    textarea#mdInput{width:100%;height:calc(100% - 110px);box-sizing:border-box;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;font-size:13px;padding:8px;border:1px solid #e6e9f2;border-radius:6px;resize:none}
-    #graph{width:100%;height:100%;display:block}
-    .footer-note{font-size:12px;color:#666;margin-top:8px}
-    label.small{font-size:13px;color:#444;display:block;margin-bottom:6px}
-  </style>
+<meta charset="utf-8" />
+<title>Bubble Map — cleaner layout (collision, adjustable forces)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root{--accent:#2f80ed;--muted:#9aa6c4;background:#fafbfd}
+  html,body{height:100%;margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--background)}
+  body{display:flex;height:100vh}
+  #left{width:36%;padding:12px;border-right:1px solid #e6e9f2;box-sizing:border-box;background:#fff;overflow:auto}
+  #right{flex:1;position:relative}
+  textarea{width:100%;height:52vh;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:13px;padding:8px;border:1px solid #e6e9f2;border-radius:6px}
+  .controls{display:flex;gap:8px;align-items:center;margin-top:8px}
+  button{background:var(--accent);color:#fff;border:0;padding:8px 10px;border-radius:6px;cursor:pointer}
+  button.secondary{background:#fff;color:#333;border:1px solid #dfe7fb}
+  label{font-size:13px;color:#333}
+  .small{font-size:12px;color:#666}
+  .sl{display:flex;align-items:center;gap:8px;margin-top:6px}
+  input[type=range]{width:160px}
+  #graph{width:100%;height:100%;background:linear-gradient(#fbfdff,#ffffff)}
+  .tooltip{position:absolute;padding:6px 8px;background:#222;color:#fff;border-radius:6px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .12s}
+</style>
 </head>
 <body>
-  <header>
-    <div class="controls">
-      <button id="renderBtn">Render Markdown</button>
-      <button id="fitBtn" class="secondary">Fit View</button>
-      <button id="togglePhysics" class="secondary">Tạm dừng physics</button>
-      <button id="exportPng" class="secondary">Export PNG</button>
-    </div>
-    <div style="flex:1"></div>
-    <div class="hint">Dán Markdown dạng "#" vào bên trái. Mỗi dòng có thể thêm <code>{size:NN color:#RRGGBB}</code></div>
-  </header>
 
-  <div class="panel">
-    <div class="left">
-      <label class="small">Markdown input (heading levels # → child relationships)</label>
-      <textarea id="mdInput" placeholder="# Trung tâm {size:70 color:#ff6b4a}\n## Sản phẩm A {size:44 color:#4aa7ff}\n### A1 {size:26 color:#ffd36b}"></textarea>
+<div id="left">
+  <h3>Markdown input (heading + cross-links)</h3>
+  <small class="small">Cú pháp: Heading `#` … `###### Label {size:NN color:#HEX}` — Cross link: <code>-> Source | Target {color:#HEX}</code></small>
+  <textarea id="mdInput"># Trung tâm {size:80 color:#ff6b4a}
 
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button id="loadSample" class="secondary">Load sample</button>
-        <button id="clear" class="secondary">Clear</button>
-      </div>
+##### Sản phẩm A {size:44 color:#4aa7ff}
+###### A1 {size:22 color:#ffd36b}
+###### A2
+###### A3
 
-      <div class="footer-note">
-        <strong>Lưu ý cú pháp:</strong><br>
-        - Dòng heading: bắt đầu bằng #, ##, ### ...<br>
-        - Thuộc tính: <code>{size:NN color:#RRGGBB}</code> (không bắt buộc).<br>
-        - Option 2: mỗi node có màu riêng nếu bạn khai báo color; nếu không khai báo, sẽ gán màu ngẫu nhiên.
-      </div>
-    </div>
+##### Sản phẩm B {size:44 color:#33d1ff}
+###### B1
 
-    <div class="right">
-      <svg id="graph"></svg>
-    </div>
+---
+# Cross Links
+-> A1 | Sản phẩm B {color:#00ffaa}
+  </textarea>
+
+  <div class="controls">
+    <button id="renderBtn">Render</button>
+    <button id="fitBtn" class="secondary">Fit view</button>
+    <button id="toggleLabels" class="secondary">Toggle labels</button>
   </div>
 
+  <div style="margin-top:12px">
+    <label class="small">Tuning (nhấn Render sau khi chỉnh)</label>
+    <div class="sl"><label>Link dist</label><input id="linkDist" type="range" min="40" max="300" value="120"><span id="linkDistVal">120</span></div>
+    <div class="sl"><label>Charge</label><input id="charge" type="range" min="-1200" max="-50" value="-380"><span id="chargeVal">-380</span></div>
+    <div class="sl"><label>Collision pad</label><input id="collide" type="range" min="0" max="30" value="7"><span id="collideVal">7</span></div>
+    <div class="sl"><label>Label size threshold</label><input id="labelTh" type="range" min="0" max="80" value="22"><span id="labelThVal">22</span></div>
+  </div>
+
+  <div style="margin-top:12px">
+    <label class="small">Gợi ý hiển thị</label>
+    <div class="small" style="margin-top:6px">• Kéo node để điều chỉnh vị trí. Click node để highlight các liên kết và node kề. Hover để xem tooltip. Dùng sliders để điều chỉnh layout.</div>
+  </div>
+</div>
+
+<div id="right">
+  <div id="graph"></div>
+  <div id="tooltip" class="tooltip"></div>
+</div>
+
 <script>
-/* === Parsing Markdown headings with inline attributes === */
-function parseMarkdownHeadings(mdText) {
-  const lines = mdText.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const res = [];
-  const headingRe = /^(\#{1,6})\s*(.+?)(?:\s*\{(.+)\}\s*)?$/;
-  lines.forEach(line => {
-    const m = headingRe.exec(line);
-    if (!m) return;
-    const level = m[1].length;
-    let label = m[2].trim();
-    const attrText = m[3] || '';
-    let size, color;
-    if (attrText) {
-      const parts = attrText.split(/[\s,]+/).map(p=>p.trim()).filter(Boolean);
-      parts.forEach(p=>{
-        const kv = p.split(':').map(x=>x.trim());
-        if (kv.length < 2) return;
-        const key = kv[0].toLowerCase();
-        const val = kv.slice(1).join(':');
-        if (key === 'size') {
-          const n = Number(val);
-          if (!Number.isNaN(n)) size = n;
-        } else if (key === 'color') {
-          const c = val;
-          if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c)) color = c;
-          else color = c;
-        }
-      });
+// ---------- helpers ----------
+function parseAttributes(text){
+  const res = {};
+  if (!text) return res;
+  const m = text.match(/\{([^}]*)\}/);
+  if (!m) return res;
+  const parts = m[1].split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+  parts.forEach(p=>{
+    const [k, ...rest] = p.split(':');
+    if (!k) return;
+    const v = rest.join(':');
+    if (k.toLowerCase() === 'size') {
+      const n = Number(v); if (!isNaN(n)) res.size = n;
+    } else if (k.toLowerCase() === 'color') {
+      res.color = v;
     }
-    res.push({ level, label, size, color });
   });
   return res;
 }
-
-/* === Build edges from headings (stack) === */
-function headingsToEdges(items) {
-  const edges = [];
-  const stack = [];
-  items.forEach(item => {
-    const cur = { level: item.level, label: item.label, size: item.size, color: item.color };
-    while (stack.length && stack[stack.length-1].level >= cur.level) stack.pop();
-    if (stack.length) edges.push({ source: stack[stack.length-1].label, target: cur.label });
-    stack.push(cur);
-  });
-  return edges;
+function randomPastelHex(){
+  const r = Math.round(Math.random()*140 + 80);
+  const g = Math.round(Math.random()*140 + 80);
+  const b = Math.round(Math.random()*140 + 80);
+  return '#'+[r,g,b].map(n=>n.toString(16).padStart(2,'0')).join('');
+}
+function defaultSize(level){
+  if (level===1) return 70;
+  if (level===2) return 44;
+  if (level===3) return 28;
+  return 16;
 }
 
-/* === Build unique nodes with attributes === */
-function buildNodesFromHeadings(items) {
+// ---------- parse markdown into nodes & links (merge nodes by label) ----------
+function parseMarkdown(md){
+  const lines = md.split(/\r?\n/).map(l=>l.replace('\u00A0',' ').trim());
   const nodes = new Map();
-  const defaultSizeByLevel = {1:60,2:44,3:30,4:22,5:16,6:12};
-  items.forEach(it => {
-    if (!nodes.has(it.label)) {
-      const defSize = defaultSizeByLevel[it.level] || 14;
-      const node = { id: it.label, label: it.label, size: it.size || defSize, color: it.color || null };
-      nodes.set(it.label, node);
-    } else {
-      const existing = nodes.get(it.label);
-      if (!existing.size && it.size) existing.size = it.size;
-      if (!existing.color && it.color) existing.color = it.color;
+  const links = [];
+  const stack = [];
+
+  for (let raw of lines){
+    if (!raw) continue;
+    // cross link: -> src | tgt {color:...}
+    const cross = raw.match(/^->\s*(.*?)\s*\|\s*(.*?)\s*(\{[^}]*\})?$/);
+    if (cross){
+      const s = cross[1].trim(), t = cross[2].trim();
+      const attrs = parseAttributes(cross[3]||'');
+      if (!nodes.has(s)) nodes.set(s, {id:s,label:s,size:null,color:null});
+      if (!nodes.has(t)) nodes.set(t, {id:t,label:t,size:null,color:null});
+      links.push({ source: s, target: t, color: attrs.color || null, cross: true });
+      continue;
     }
-  });
-  return Array.from(nodes.values());
-}
-
-/* === Random pastel for nodes without color === */
-function randomPastel() {
-  const r = Math.round((Math.random() * 127) + 128);
-  const g = Math.round((Math.random() * 127) + 128);
-  const b = Math.round((Math.random() * 127) + 128);
-  return `rgb(${r},${g},${b})`;
-}
-
-/* === D3 rendering & interactivity === */
-const svg = d3.select('#graph');
-let width = window.innerWidth;
-let height = window.innerHeight - document.querySelector('header').offsetHeight - 56;
-svg.attr('viewBox', `0 0 ${width} ${height}`);
-
-let simulation = null;
-let nodeGroupElems = null;
-let linkElems = null;
-let highlightedId = null; // currently highlighted node id
-
-function renderGraphFromMarkdown(mdText) {
-  const headings = parseMarkdownHeadings(mdText);
-  if (!headings || headings.length === 0) {
-    alert('Không tìm thấy heading trong Markdown (hãy dùng #, ##, ### ...)');
-    return;
+    const h = raw.match(/^(#{1,7})\s+(.*)$/);
+    if (h){
+      const level = h[1].length;
+      const rest = h[2].trim();
+      const attrs = parseAttributes(rest);
+      const label = rest.replace(/\{.*\}/,'').trim();
+      if (!nodes.has(label)){
+        nodes.set(label, { id:label, label, size: attrs.size || defaultSize(level), color: attrs.color || randomPastelHex(), level });
+      } else {
+        const cur = nodes.get(label);
+        if (attrs.size !== undefined) cur.size = attrs.size;
+        if (attrs.color !== undefined) cur.color = attrs.color;
+        if (!cur.level) cur.level = level;
+      }
+      // parent link from nearest smaller level
+      while (stack.length && stack[stack.length-1].level >= level) stack.pop();
+      if (stack.length){
+        const parent = stack[stack.length-1].label;
+        links.push({ source: parent, target: label, color: null, cross: false });
+      }
+      stack.push({ level, label });
+    }
   }
 
-  const edges = headingsToEdges(headings);
-  const nodesArr = buildNodesFromHeadings(headings);
+  return { nodes: Array.from(nodes.values()), links };
+}
 
-  nodesArr.forEach(n => { if (!n.color) n.color = randomPastel(); });
+// ---------- draw graph ----------
+let svg, g, simulation;
+let currentHighlighted = null;
+const tooltip = document.getElementById('tooltip');
 
-  const nodeById = new Map(nodesArr.map(n => [n.id, n]));
-  const linksArr = edges.map(e => ({ source: nodeById.get(e.source), target: nodeById.get(e.target) }));
+function draw(nodes, links, opts){
+  const container = document.getElementById('graph');
+  container.innerHTML = '';
+  const w = container.clientWidth || window.innerWidth;
+  const h = container.clientHeight || window.innerHeight;
 
-  // clear
-  svg.selectAll('*').remove();
+  svg = d3.select(container).append('svg').attr('width', w).attr('height', h).style('background','transparent');
+  g = svg.append('g');
 
-  const linkG = svg.append('g').attr('class','links');
-  const nodeG = svg.append('g').attr('class','nodes');
+  // zoom/pan
+  const zoom = d3.zoom().scaleExtent([0.2,4]).on('zoom', (e)=> g.attr('transform', e.transform));
+  svg.call(zoom);
 
-  linkElems = linkG.selectAll('line').data(linksArr).join('line')
-    .attr('stroke','#d6d6d6')
-    .attr('stroke-width', 2)
+  // prepare map for simulation links
+  const nodeById = new Map(nodes.map(n=>[n.id,n]));
+  const simLinks = links.map(l => ({
+    source: nodeById.get(l.source) || nodeById.get(l.target) || {id:l.source},
+    target: nodeById.get(l.target) || nodeById.get(l.source) || {id:l.target},
+    color: l.color || null,
+    cross: !!l.cross
+  }));
+
+  // link elements
+  const linkG = g.append('g').attr('class','links');
+  const linkElems = linkG.selectAll('line').data(simLinks).join('line')
+    .attr('stroke', d=>d.color || '#d6d6d6')
+    .attr('stroke-width', d=> d.cross ? 2.2 : 1.6)
+    .attr('opacity',0.9)
     .attr('stroke-linecap','round');
 
-  nodeGroupElems = nodeG.selectAll('g').data(nodesArr).join('g').attr('class','node');
+  // node groups
+  const nodeG = g.append('g').attr('class','nodes');
+  const nodeGroups = nodeG.selectAll('g').data(nodes, d=>d.id).join('g').attr('class','node');
 
-  nodeGroupElems.append('circle')
-    .attr('r', d => Math.max(6, d.size))
+  nodeGroups.append('circle')
+    .attr('r', d => d.size)
     .attr('fill', d => d.color)
-    .attr('stroke','#2b2b2b')
-    .attr('stroke-width',0.9)
+    .attr('stroke','#222')
+    .attr('stroke-width',0.8)
     .style('cursor','pointer');
 
-  nodeGroupElems.append('text')
-    .attr('x', d => Math.max(8, d.size + 6))
+  nodeGroups.append('text')
+    .text(d=>d.label)
+    .attr('x', d => Math.max(8, d.size + 7))
     .attr('y', 4)
-    .style('font-size','13px')
-    .text(d => d.label);
+    .style('font-size','12px')
+    .style('pointer-events','none')
+    .style('opacity', d => (d.size >= opts.labelThreshold ? 1 : 0)) // hide small labels
+    .attr('class','nlabel');
 
-  // drag behavior
-  function dragstarted(event, d) {
-    if (!event.active && simulation) simulation.alphaTarget(0.3).restart();
-    d.fx = d.x; d.fy = d.y;
-  }
-  function dragged(event, d) {
-    d.fx = event.x; d.fy = event.y;
-  }
-  function dragended(event, d) {
-    if (!event.active && simulation) simulation.alphaTarget(0.0);
-    d.fx = null; d.fy = null;
-  }
-  const dragBehavior = d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended);
-  nodeGroupElems.call(dragBehavior);
+  // adjacency
+  const adj = new Map(); nodes.forEach(n=>adj.set(n.id,new Set()));
+  simLinks.forEach(l=> { if (l.source && l.target) { adj.get(l.source.id).add(l.target.id); adj.get(l.target.id).add(l.source.id); } });
 
-  // click handling: highlight edges & neighbor nodes
-  nodeGroupElems.on('click', (event, d) => {
-    // if click same node again -> toggle off
-    if (highlightedId === d.id) {
-      resetHighlight();
-      highlightedId = null;
-      return;
-    }
-    highlightedId = d.id;
-    applyHighlight(d.id, d.color);
-    event.stopPropagation();
-  });
-
-  // click on background to reset
-  svg.on('click', (event) => {
-    // only reset if clicked on svg (not a node)
-    if (event.target === svg.node()) {
-      resetHighlight();
-      highlightedId = null;
-    }
-  });
-
-  // simulation
-  simulation = d3.forceSimulation(nodesArr)
-    .force('link', d3.forceLink(linksArr).id(d => d.id).distance(120).strength(1))
-    .force('charge', d3.forceManyBody().strength(-380))
-    .force('center', d3.forceCenter(width / 2, height / 2))
+  // forces
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(simLinks).id(d=>d.id).distance(d=> {
+      // base on linkDist slider and node sizes
+      const base = opts.linkDist;
+      const extra = ((d.source.size || 16) + (d.target.size || 16)) * 0.6;
+      return Math.max(base, extra);
+    }).strength(0.9))
+    .force('charge', d3.forceManyBody().strength(opts.charge))
+    .force('center', d3.forceCenter(w/2,h/2))
+    .force('collide', d3.forceCollide(d=> (d.size || 12) + opts.collidePad).iterations(2))
     .alphaDecay(0.02)
     .on('tick', ticked);
 
-  simulation.alpha(0.8).restart();
-
-  function ticked() {
+  function ticked(){
     linkElems
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y);
+      .attr('x1', d=>d.source.x)
+      .attr('y1', d=>d.source.y)
+      .attr('x2', d=>d.target.x)
+      .attr('y2', d=>d.target.y);
 
-    nodeGroupElems.attr('transform', d => `translate(${d.x},${d.y})`);
+    nodeGroups.attr('transform', d=>`translate(${d.x},${d.y})`);
   }
 
-  // helper: build adjacency map (for quick neighbor lookup)
-  const adj = new Map();
-  nodesArr.forEach(n => adj.set(n.id, new Set()));
-  linksArr.forEach(l => {
-    adj.get(l.source.id).add(l.target.id);
-    adj.get(l.target.id).add(l.source.id);
+  // drag (zoom-aware)
+  function dragstarted(event,d){
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    const pt = d3.zoomTransform(svg.node()).invert(d3.pointer(event, svg.node()));
+    d.fx = pt[0]; d.fy = pt[1];
+  }
+  function dragged(event,d){
+    const pt = d3.zoomTransform(svg.node()).invert(d3.pointer(event, svg.node()));
+    d.fx = pt[0]; d.fy = pt[1];
+  }
+  function dragended(event,d){
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null; d.fy = null;
+  }
+  nodeGroups.call(d3.drag().on('start',dragstarted).on('drag',dragged).on('end',dragended));
+
+  // hover tooltip
+  nodeGroups.on('mouseover', (event,d)=>{
+    const [mx,my] = d3.pointer(event, document.body);
+    tooltip.style.left = (mx+14) + 'px';
+    tooltip.style.top = (my+10) + 'px';
+    tooltip.style.opacity = 1;
+    tooltip.innerHTML = `<strong>${d.label}</strong><br>size: ${d.size}<br>color: ${d.color}`;
+    // highlight connected labels temporarily
+    d3.select(event.currentTarget).select('circle').attr('stroke-width',2.2);
+  }).on('mousemove', (event)=> {
+    const [mx,my] = d3.pointer(event, document.body);
+    tooltip.style.left = (mx+14) + 'px';
+    tooltip.style.top = (my+10) + 'px';
+  }).on('mouseout', (event)=> {
+    tooltip.style.opacity = 0;
+    d3.select(event.currentTarget).select('circle').attr('stroke-width',0.8);
   });
 
-  // applyHighlight: color edges connected to nodeId, highlight neighbor nodes
-  function applyHighlight(nodeId, color) {
-    // highlight edges: if edge touches nodeId -> color it with the node color; else dim
-    linkElems
-      .transition().duration(150)
-      .attr('stroke', le => (le.source.id === nodeId || le.target.id === nodeId) ? color : '#e9e9e9')
-      .attr('stroke-width', le => (le.source.id === nodeId || le.target.id === nodeId) ? 4 : 1.5)
-      .attr('opacity', le => (le.source.id === nodeId || le.target.id === nodeId) ? 1 : 0.35);
+  // click highlight
+  nodeGroups.on('click', (event,d) => {
+    event.stopPropagation();
+    if (currentHighlighted === d.id) { resetHighlight(); currentHighlighted = null; return; }
+    currentHighlighted = d.id;
+    // highlight links touching d
+    linkElems.transition().duration(120)
+      .attr('stroke', l => (l.source.id===d.id || l.target.id===d.id) ? (l.color || d.color) : '#eee')
+      .attr('stroke-width', l => (l.source.id===d.id || l.target.id===d.id) ? 4 : 1.0)
+      .attr('opacity', l => (l.source.id===d.id || l.target.id===d.id) ? 1 : 0.25);
+    // highlight nodes neighbors
+    nodeGroups.select('circle').transition().duration(120)
+      .attr('fill', nd => (nd.id===d.id || adj.get(d.id).has(nd.id)) ? nd.color : '#efefef')
+      .attr('opacity', nd => (nd.id===d.id || adj.get(d.id).has(nd.id)) ? 1 : 0.4)
+      .attr('stroke-width', nd => nd.id===d.id ? 1.8 : 0.8);
+    nodeGroups.select('text').transition().duration(120).style('fill-opacity', nd => (nd.id===d.id || adj.get(d.id).has(nd.id)) ? 1 : 0.35);
+  });
 
-    // highlight nodes: target node and its neighbors keep full color; others dim
-    nodeGroupElems.select('circle')
-      .transition().duration(150)
-      .attr('fill', nd => {
-        if (nd.id === nodeId) return nd.color; // clicked node color (keep)
-        if (adj.get(nodeId).has(nd.id)) return nd.color; // neighbor keep own color
-        // dim non-related node by converting to a desaturated/gray version
-        return '#e6e6e6';
-      })
-      .attr('stroke-width', nd => (nd.id === nodeId ? 2.2 : (adj.get(nodeId).has(nd.id) ? 1.4 : 0.7)))
-      .attr('opacity', nd => (nd.id === nodeId || adj.get(nodeId).has(nd.id)) ? 1 : 0.45);
+  // click background to reset
+  svg.on('click', ()=>{ resetHighlight(); currentHighlighted = null; });
 
-    // node labels: dim non-relations
-    nodeGroupElems.select('text')
-      .transition().duration(150)
-      .style('fill-opacity', nd => (nd.id === nodeId || adj.get(nodeId).has(nd.id)) ? 1 : 0.35);
+  function resetHighlight(){
+    linkElems.transition().duration(120).attr('stroke', d=> d.color || '#d6d6d6').attr('stroke-width', d=> d.cross?2.2:1.6).attr('opacity',0.9);
+    nodeGroups.select('circle').transition().duration(120).attr('fill', d=>d.color).attr('opacity',1).attr('stroke-width',0.8);
+    nodeGroups.select('text').transition().duration(120).style('fill-opacity', d => (d.size >= opts.labelThreshold ? 1 : 0.25));
   }
-
-  // reset highlight to default visuals
-  function resetHighlight() {
-    linkElems
-      .transition().duration(150)
-      .attr('stroke', '#d6d6d6')
-      .attr('stroke-width', 2)
-      .attr('opacity', 1);
-
-    nodeGroupElems.select('circle')
-      .transition().duration(150)
-      .attr('fill', d => d.color)
-      .attr('stroke-width', 0.9)
-      .attr('opacity', 1);
-
-    nodeGroupElems.select('text')
-      .transition().duration(150)
-      .style('fill-opacity', 1);
-  }
-
-  // expose reset to outer scope in case user wants to reset from controls
-  window._resetHighlight = resetHighlight;
 }
 
-/* === Controls handlers (same as before) === */
-document.getElementById('renderBtn').addEventListener('click', () => {
+// ---------- UI wiring ----------
+const linkDistEl = document.getElementById('linkDist');
+const linkDistVal = document.getElementById('linkDistVal');
+const chargeEl = document.getElementById('charge');
+const chargeVal = document.getElementById('chargeVal');
+const collideEl = document.getElementById('collide');
+const collideVal = document.getElementById('collideVal');
+const labelThEl = document.getElementById('labelTh');
+const labelThVal = document.getElementById('labelThVal');
+const toggleLabelsBtn = document.getElementById('toggleLabels');
+let showLabelsForced = false;
+
+linkDistEl.oninput = ()=> linkDistVal.textContent = linkDistEl.value;
+chargeEl.oninput = ()=> chargeVal.textContent = chargeEl.value;
+collideEl.oninput = ()=> collideVal.textContent = collideEl.value;
+labelThEl.oninput = ()=> labelThVal.textContent = labelThEl.value;
+
+document.getElementById('renderBtn').addEventListener('click', ()=> {
   const md = document.getElementById('mdInput').value;
-  renderGraphFromMarkdown(md);
-});
-
-document.getElementById('loadSample').addEventListener('click', () => {
-  const sample = `
-# Trung tâm {size:70 color:#ff6b4a}
-## Sản phẩm A {size:44 color:#4aa7ff}
-### A1 {size:26 color:#ffd36b}
-### A2 {size:26 color:#ffd36b}
-## Sản phẩm B {size:44 color:#33d1ff}
-### B1 {size:20 color:#9ff3ff}
-# Một nhánh khác {size:60 color:#8b5cf6}
-## Sub 1 {size:34 color:#f97316}
-### Sub 1.1 {size:18 color:#f59e0b}
-`;
-  document.getElementById('mdInput').value = sample.trim();
-  renderGraphFromMarkdown(sample);
-});
-
-document.getElementById('clear').addEventListener('click', () => {
-  document.getElementById('mdInput').value = '';
-  svg.selectAll('*').remove();
-  if (simulation) { simulation.stop(); simulation = null; }
-  highlightedId = null;
-});
-
-document.getElementById('fitBtn').addEventListener('click', () => {
-  if (!simulation) return;
-  simulation.alpha(0.6).restart();
-  setTimeout(()=> simulation.alphaTarget(0.0), 700);
-});
-
-let physicsOn = true;
-const toggleBtn = document.getElementById('togglePhysics');
-toggleBtn.addEventListener('click', () => {
-  if (!simulation) return;
-  physicsOn = !physicsOn;
-  if (physicsOn) {
-    simulation.alpha(0.6).restart();
-    toggleBtn.textContent = 'Tạm dừng physics';
-    toggleBtn.classList.remove('secondary');
-  } else {
-    simulation.stop();
-    toggleBtn.textContent = 'Tiếp tục physics';
-    toggleBtn.classList.add('secondary');
-  }
-});
-
-document.getElementById('exportPng').addEventListener('click', () => {
-  const svgEl = document.querySelector('#graph');
-  const serializer = new XMLSerializer();
-  const svgStr = serializer.serializeToString(svgEl);
-  const blob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - document.querySelector('header').offsetHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = window.getComputedStyle(document.body).backgroundColor || '#fff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-    const link = document.createElement('a');
-    link.download = 'bubblemap-markdown-highlight.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+  const parsed = parseMarkdown(md);
+  const opts = {
+    linkDist: Number(linkDistEl.value),
+    charge: Number(chargeEl.value),
+    collidePad: Number(collideEl.value),
+    labelThreshold: Number(labelThEl.value)
   };
-  img.onerror = (e) => { alert('Export PNG thất bại'); console.error(e); };
-  img.src = url;
+  draw(parsed.nodes, parsed.links, opts);
+});
+document.getElementById('fitBtn').addEventListener('click', ()=> {
+  const svgEl = d3.select('#graph svg');
+  svgEl.transition().duration(400).call(d3.zoom().transform, d3.zoomIdentity);
+});
+toggleLabelsBtn.addEventListener('click', ()=> {
+  showLabelsForced = !showLabelsForced;
+  // toggle CSS on labels by re-render (quick approach)
+  document.getElementById('renderBtn').click();
 });
 
-/* Resize */
-function resize() {
-  width = window.innerWidth;
-  height = window.innerHeight - document.querySelector('header').offsetHeight - 56;
-  svg.attr('viewBox', `0 0 ${width} ${height}`);
-  if (simulation) simulation.force('center', d3.forceCenter(width/2, height/2));
-}
-window.addEventListener('resize', resize);
+// auto render initial sample
+document.getElementById('renderBtn').click();
 
-/* Optional: auto-load sample on open
-document.getElementById('loadSample').click(); */
 </script>
 </body>
 </html>
